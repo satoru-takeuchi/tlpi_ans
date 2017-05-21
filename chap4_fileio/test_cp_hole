@@ -1,0 +1,115 @@
+#!/bin/bash
+
+run_testprog() {
+    ${TESTPROG} ${TESTFILE} ${TESTFILE}.cp    
+}
+
+is_copied_with_hole() {
+    cmp -s ${TESTFILE} ${TESTFILE}.cp || return 1
+    test $(stat --printf="%b" ${TESTFILE}) -eq $(stat --printf="%b" ${TESTFILE}) || return 1
+    return 0
+}
+
+cleanup() {
+    rm -f ${TESTFILE} ${TESTFILE}.cp
+}
+
+TESTFILE=test
+TESTPROG=./cp_hole
+
+RET=0
+BLKSIZE=$(stat --printf="%o" .)
+
+trap 'cleanup ; exit $RET' 0 1 2 3 15
+
+cleanup
+
+echo -n "empty file: " >&2
+if touch ${TESTFILE} && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+cleanup
+
+echo -n "|data|:" >&2
+if dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} count=1 2>/dev/null && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+cleanup
+
+echo -n "|hole|:" >&2
+if dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=1 count=0 2>/dev/null && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+cleanup
+
+echo -n "|hole|data|:" >&2
+if dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=1 count=1 2>/dev/null && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+cleanup
+
+echo -n "|data|hole|:" >&2
+if dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} count=1 2>/dev/null && \
+	dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=2 count=0 2>/dev/null && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+cleanup
+
+echo -n "|data|hole|data|:" >&2
+if dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} count=1 2>/dev/null && \
+	dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=2 count=1 2>/dev/null && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+cleanup
+
+echo -n "|hole|data|hole|data|hole|:" >&2
+if dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=1 count=1 2>/dev/null && \
+	dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=3 count=1 2>/dev/null && \
+	dd if=/dev/zero of=${TESTFILE} bs=${BLKSIZE} seek=5 count=0 2>/dev/null && \
+	run_testprog && \
+	is_copied_with_hole ; then
+    echo OK
+else    
+    echo NG
+    RET=1
+fi
+
+#cleanup
+
+exit $RET
